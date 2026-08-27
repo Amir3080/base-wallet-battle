@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Base Wallet Battle</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+  <div class="background-glow glow-one"></div>
+  <div class="background-glow glow-two"></div>
+
+  <main class="container">
+
+    <div class="badge">BASE NETWORK</div>
+
+    <h1>Wallet Battle</h1>
+
+    <p class="subtitle">
+      Compare two Base wallets and see which one has stronger onchain activity.
+    </p>
+
+    <section class="wallet-inputs">
+
+      <div class="wallet-box">
+        <span class="wallet-label">WALLET A</span>
+        <input
+          type="text"
+          id="walletA"
+          placeholder="0x..."
+        >
+      </div>
+
+      <div class="vs-circle">VS</div>
+
+      <div class="wallet-box">
+        <span class="wallet-label">WALLET B</span>
+        <input
+          type="text"
+          id="walletB"
+          placeholder="0x..."
+        >
+      </div>
+
+    </section>
+
+    <button id="compareButton">
+      ⚔ Compare Wallets
+    </button>
+
+    <section class="comparison-card">
+
+      <div class="card-header">
+        <span>Wallet A</span>
+        <span>Battle Stats</span>
+        <span>Wallet B</span>
+      </div>
+
+
+    <div class="stat-row">
+  <span class="value" id="walletAgeA">--</span>
+  <span class="stat-name">Wallet Age</span>
+  <span class="value" id="walletAgeB">--</span>
+</div>
+
+<div class="stat-row">
+  <span class="value" id="transactionsA">--</span>
+  <span class="stat-name">Transactions</span>
+  <span class="value" id="transactionsB">--</span>
+</div>
+
+      <div class="stat-row">
+    <span class="value" id="activeDaysA">--</span>
+    <span class="stat-name">Active Days</span>
+    <span class="value" id="activeDaysB">--</span>
+     </div>
+
+      <div class="stat-row">
+  <span class="value" id="volumeA">--</span>
+  <span class="stat-name">Volume</span>
+  <span class="value" id="volumeB">--</span>
+     </div>
+
+    </section>
+
+    <div class="winner-box">
+      Winner will appear here
+    </div>
+
+  </main>
+
+  <script src="app.js"></script>
+
+</body>
+</html>
