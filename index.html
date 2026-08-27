@@ -1,97 +1,936 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
+
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Base Wallet Battle</title>
-  <link rel="stylesheet" href="style.css">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
+
+  <meta
+    name="description"
+    content="Compare two Base wallets by age, activity, volume, gas spent, balance and onchain score."
+  >
+
+  <title>
+    Base Wallet Battle
+  </title>
+
+  <link
+    rel="stylesheet"
+    href="style.css"
+  >
+
 </head>
+
 
 <body>
 
-  <div class="background-glow glow-one"></div>
-  <div class="background-glow glow-two"></div>
 
-  <main class="container">
+  <!-- =========================================
+       TOP BAR
+  ========================================== -->
 
-    <div class="badge">BASE NETWORK</div>
+  <header class="topbar">
 
-    <h1>Wallet Battle</h1>
+    <div class="brand">
 
-    <p class="subtitle">
-      Compare two Base wallets and see which one has stronger onchain activity.
-    </p>
-
-    <section class="wallet-inputs">
-
-      <div class="wallet-box">
-        <span class="wallet-label">WALLET A</span>
-        <input
-          type="text"
-          id="walletA"
-          placeholder="0x..."
-        >
+      <div class="base-logo">
+        <span class="base-logo-line"></span>
       </div>
 
-      <div class="vs-circle">VS</div>
+      <span class="base-word">
+        BASE
+      </span>
 
-      <div class="wallet-box">
-        <span class="wallet-label">WALLET B</span>
-        <input
-          type="text"
-          id="walletB"
-          placeholder="0x..."
-        >
-      </div>
+      <span class="brand-divider"></span>
 
-    </section>
+      <span class="brand-title">
+        Wallet Battle
+      </span>
 
-    <button id="compareButton">
-      ⚔ Compare Wallets
-    </button>
-
-    <section class="comparison-card">
-
-      <div class="card-header">
-        <span>Wallet A</span>
-        <span>Battle Stats</span>
-        <span>Wallet B</span>
-      </div>
-
-
-    <div class="stat-row">
-  <span class="value" id="walletAgeA">--</span>
-  <span class="stat-name">Wallet Age</span>
-  <span class="value" id="walletAgeB">--</span>
-</div>
-
-<div class="stat-row">
-  <span class="value" id="transactionsA">--</span>
-  <span class="stat-name">Transactions</span>
-  <span class="value" id="transactionsB">--</span>
-</div>
-
-      <div class="stat-row">
-    <span class="value" id="activeDaysA">--</span>
-    <span class="stat-name">Active Days</span>
-    <span class="value" id="activeDaysB">--</span>
-     </div>
-
-      <div class="stat-row">
-  <span class="value" id="volumeA">--</span>
-  <span class="stat-name">Volume</span>
-  <span class="value" id="volumeB">--</span>
-     </div>
-
-    </section>
-
-    <div class="winner-box">
-      Winner will appear here
     </div>
+
+
+    <div class="topbar-actions">
+
+      <div class="built-on-base">
+
+        <span class="mini-base-logo"></span>
+
+        Built on Base
+
+      </div>
+
+
+      <a
+        class="x-link"
+        href="https://x.com/amirshonnm"
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="Builder on X"
+      >
+        𝕏
+      </a>
+
+    </div>
+
+  </header>
+
+
+  <!-- =========================================
+       PAGE
+  ========================================== -->
+
+  <main class="page-shell">
+
+
+    <!-- =========================================
+         HERO
+    ========================================== -->
+
+    <section class="hero">
+
+
+      <div
+        class="
+          hero-decoration
+          hero-decoration-left
+        "
+      >
+
+        <div class="floating-base">
+          <span></span>
+        </div>
+
+      </div>
+
+
+      <div
+        class="
+          hero-decoration
+          hero-decoration-right
+        "
+      >
+
+        <div class="floating-cube"></div>
+
+      </div>
+
+
+      <div class="network-badge">
+
+        <span class="mini-base-logo"></span>
+
+        BASE NETWORK
+
+      </div>
+
+
+      <h1>
+
+        Wallet
+
+        <span>
+          Battle
+        </span>
+
+      </h1>
+
+
+      <p class="hero-subtitle">
+
+        Compare two Base wallets and discover which one has stronger onchain activity.
+
+      </p>
+
+    </section>
+
+
+    <!-- =========================================
+         WALLET INPUT
+    ========================================== -->
+
+    <section class="wallet-panel">
+
+
+      <div class="wallet-input-grid">
+
+
+        <!-- WALLET A -->
+
+        <div class="wallet-input-box">
+
+          <label for="walletA">
+            WALLET A
+          </label>
+
+
+          <div class="input-wrapper">
+
+            <span class="wallet-icon">
+              ◫
+            </span>
+
+
+            <input
+              type="text"
+              id="walletA"
+              placeholder="0x... Base address"
+              autocomplete="off"
+              spellcheck="false"
+            >
+
+          </div>
+
+        </div>
+
+
+        <!-- VS -->
+
+        <div class="vs-circle">
+          VS
+        </div>
+
+
+        <!-- WALLET B -->
+
+        <div class="wallet-input-box">
+
+          <label for="walletB">
+            WALLET B
+          </label>
+
+
+          <div class="input-wrapper">
+
+            <span class="wallet-icon">
+              ◫
+            </span>
+
+
+            <input
+              type="text"
+              id="walletB"
+              placeholder="0x... Base address"
+              autocomplete="off"
+              spellcheck="false"
+            >
+
+          </div>
+
+        </div>
+
+      </div>
+
+
+      <!-- ERROR -->
+
+      <div
+        id="errorMessage"
+        class="error-message"
+      ></div>
+
+
+      <!-- COMPARE BUTTON -->
+
+      <button
+        id="compareButton"
+        class="compare-button"
+        type="button"
+      >
+
+        ⚔ Compare Wallets
+
+      </button>
+
+
+      <div class="trust-row">
+
+        <span class="shield-icon">
+          ♢
+        </span>
+
+        100% Onchain. No sign-in required.
+
+      </div>
+
+    </section>
+
+
+    <!-- =========================================
+         STATS
+    ========================================== -->
+
+    <section class="stats-card">
+
+
+      <div class="stats-header">
+
+        <span>
+          WALLET A
+        </span>
+
+        <span>
+          BATTLE STATS
+        </span>
+
+        <span>
+          WALLET B
+        </span>
+
+      </div>
+
+
+      <!-- WALLET AGE -->
+
+      <div class="stat-row">
+
+        <div
+          class="
+            stat-value
+            stat-value-a
+          "
+          id="walletAgeA"
+        >
+          --
+        </div>
+
+
+        <div class="stat-label">
+
+          <span class="stat-icon">
+            📅
+          </span>
+
+          Wallet Age
+
+        </div>
+
+
+        <div
+          class="
+            stat-value
+            stat-value-b
+          "
+          id="walletAgeB"
+        >
+          --
+        </div>
+
+      </div>
+
+
+      <!-- TRANSACTIONS -->
+
+      <div class="stat-row">
+
+        <div
+          class="
+            stat-value
+            stat-value-a
+          "
+          id="transactionsA"
+        >
+          --
+        </div>
+
+
+        <div class="stat-label">
+
+          <span class="stat-icon">
+            ▦
+          </span>
+
+          Transactions
+
+        </div>
+
+
+        <div
+          class="
+            stat-value
+            stat-value-b
+          "
+          id="transactionsB"
+        >
+          --
+        </div>
+
+      </div>
+
+
+      <!-- ACTIVE DAYS -->
+
+      <div class="stat-row">
+
+        <div
+          class="
+            stat-value
+            stat-value-a
+          "
+          id="activeDaysA"
+        >
+          --
+        </div>
+
+
+        <div class="stat-label">
+
+          <span class="stat-icon">
+            🔥
+          </span>
+
+          Active Days
+
+        </div>
+
+
+        <div
+          class="
+            stat-value
+            stat-value-b
+          "
+          id="activeDaysB"
+        >
+          --
+        </div>
+
+      </div>
+
+
+      <!-- ETH VOLUME -->
+
+      <div class="stat-row">
+
+        <div
+          class="
+            stat-value
+            stat-value-a
+          "
+          id="volumeA"
+        >
+          --
+        </div>
+
+
+        <div class="stat-label">
+
+          <span class="stat-icon">
+            ◆
+          </span>
+
+          ETH Volume
+
+        </div>
+
+
+        <div
+          class="
+            stat-value
+            stat-value-b
+          "
+          id="volumeB"
+        >
+          --
+        </div>
+
+      </div>
+
+
+      <!-- ETH BALANCE -->
+
+      <div class="stat-row">
+
+        <div
+          class="
+            stat-value
+            stat-value-a
+          "
+          id="balanceA"
+        >
+          --
+        </div>
+
+
+        <div class="stat-label">
+
+          <span class="stat-icon">
+            ▰
+          </span>
+
+          ETH Balance
+
+        </div>
+
+
+        <div
+          class="
+            stat-value
+            stat-value-b
+          "
+          id="balanceB"
+        >
+          --
+        </div>
+
+      </div>
+
+
+      <!-- GAS SPENT -->
+
+      <div class="stat-row">
+
+        <div
+          class="
+            stat-value
+            stat-value-a
+          "
+          id="gasSpentA"
+        >
+          --
+        </div>
+
+
+        <div class="stat-label">
+
+          <span class="stat-icon">
+            ⛽
+          </span>
+
+          Gas Spent
+
+        </div>
+
+
+        <div
+          class="
+            stat-value
+            stat-value-b
+          "
+          id="gasSpentB"
+        >
+          --
+        </div>
+
+      </div>
+
+
+      <!-- SCORE -->
+
+      <div class="stat-row">
+
+        <div
+          class="
+            stat-value
+            stat-value-a
+          "
+          id="onchainScoreA"
+        >
+          --
+        </div>
+
+
+        <div class="stat-label">
+
+          <span class="stat-icon">
+            ✹
+          </span>
+
+          Onchain Score
+
+        </div>
+
+
+        <div
+          class="
+            stat-value
+            stat-value-b
+          "
+          id="onchainScoreB"
+        >
+          --
+        </div>
+
+      </div>
+
+
+      <!-- =========================================
+           PERSONALITY
+      ========================================== -->
+
+      <section class="personality-section">
+
+
+        <!-- WALLET A -->
+
+        <div class="personality-card">
+
+          <span class="personality-label">
+            WALLET A TYPE
+          </span>
+
+
+          <div
+            class="personality-emoji"
+            id="personalityEmojiA"
+          >
+            🧬
+          </div>
+
+
+          <div
+            class="personality-title"
+            id="personalityA"
+          >
+            --
+          </div>
+
+
+          <div
+            class="personality-description"
+            id="personalityDescA"
+          >
+
+            Analyze wallet to discover its personality.
+
+          </div>
+
+        </div>
+
+
+        <!-- WALLET B -->
+
+        <div class="personality-card">
+
+          <span class="personality-label">
+            WALLET B TYPE
+          </span>
+
+
+          <div
+            class="personality-emoji"
+            id="personalityEmojiB"
+          >
+            🧬
+          </div>
+
+
+          <div
+            class="personality-title"
+            id="personalityB"
+          >
+            --
+          </div>
+
+
+          <div
+            class="personality-description"
+            id="personalityDescB"
+          >
+
+            Analyze wallet to discover its personality.
+
+          </div>
+
+        </div>
+
+      </section>
+
+
+      <!-- =========================================
+           SCORE BREAKDOWN
+      ========================================== -->
+
+      <section class="score-breakdown">
+
+
+        <h3>
+          Onchain Score Breakdown
+        </h3>
+
+
+        <div class="breakdown-grid">
+
+
+          <!-- WALLET A BREAKDOWN -->
+
+          <div class="breakdown-wallet">
+
+
+            <div class="breakdown-title">
+              Wallet A
+            </div>
+
+
+            <div class="breakdown-row">
+
+              <span>
+                Wallet Age
+              </span>
+
+              <strong id="breakdownAgeA">
+                --
+              </strong>
+
+            </div>
+
+
+            <div class="breakdown-row">
+
+              <span>
+                Transactions
+              </span>
+
+              <strong id="breakdownTxA">
+                --
+              </strong>
+
+            </div>
+
+
+            <div class="breakdown-row">
+
+              <span>
+                Active Days
+              </span>
+
+              <strong id="breakdownDaysA">
+                --
+              </strong>
+
+            </div>
+
+
+            <div class="breakdown-row">
+
+              <span>
+                Volume
+              </span>
+
+              <strong id="breakdownVolumeA">
+                --
+              </strong>
+
+            </div>
+
+
+            <div class="breakdown-row">
+
+              <span>
+                Gas Spent
+              </span>
+
+              <strong id="breakdownGasA">
+                --
+              </strong>
+
+            </div>
+
+          </div>
+
+
+          <!-- WALLET B BREAKDOWN -->
+
+          <div class="breakdown-wallet">
+
+
+            <div class="breakdown-title">
+              Wallet B
+            </div>
+
+
+            <div class="breakdown-row">
+
+              <span>
+                Wallet Age
+              </span>
+
+              <strong id="breakdownAgeB">
+                --
+              </strong>
+
+            </div>
+
+
+            <div class="breakdown-row">
+
+              <span>
+                Transactions
+              </span>
+
+              <strong id="breakdownTxB">
+                --
+              </strong>
+
+            </div>
+
+
+            <div class="breakdown-row">
+
+              <span>
+                Active Days
+              </span>
+
+              <strong id="breakdownDaysB">
+                --
+              </strong>
+
+            </div>
+
+
+            <div class="breakdown-row">
+
+              <span>
+                Volume
+              </span>
+
+              <strong id="breakdownVolumeB">
+                --
+              </strong>
+
+            </div>
+
+
+            <div class="breakdown-row">
+
+              <span>
+                Gas Spent
+              </span>
+
+              <strong id="breakdownGasB">
+                --
+              </strong>
+
+            </div>
+
+          </div>
+
+        </div>
+
+      </section>
+
+
+      <!-- =========================================
+           WINNER
+      ========================================== -->
+
+      <div
+        class="winner-box"
+        id="winnerBox"
+      >
+
+
+        <div class="winner-title">
+
+          Winner will appear here
+
+        </div>
+
+
+        <div class="winner-subtitle">
+
+          Compare two wallets to start the battle.
+
+        </div>
+
+      </div>
+
+
+      <!-- =========================================
+           ACTION BUTTONS
+      ========================================== -->
+
+      <div class="result-actions">
+
+
+        <button
+          id="shareButton"
+          class="share-button"
+          type="button"
+          style="display: none;"
+        >
+
+          𝕏 Share on X
+
+        </button>
+
+
+        <button
+          id="copyLinkButton"
+          class="copy-link-button"
+          type="button"
+          style="display: none;"
+        >
+
+          🔗 Copy Battle Link
+
+        </button>
+
+
+      </div>
+
+
+    </section>
+
+
+    <!-- =========================================
+         FOOTER
+    ========================================== -->
+
+    <footer class="footer">
+
+
+      <div class="footer-line">
+
+
+        <span class="mini-base-logo"></span>
+
+
+        Base Wallet Battle
+
+
+        <span class="footer-dot">
+          •
+        </span>
+
+
+        Built with ❤️ by
+
+
+        <a
+          href="https://x.com/amirshonnm"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+
+          @amirshonnm
+
+        </a>
+
+
+      </div>
+
+
+    </footer>
+
 
   </main>
 
-  <script src="app.js"></script>
+
+  <!-- =========================================
+       APP
+  ========================================== -->
+
+  <script
+    type="module"
+    src="app.js"
+  ></script>
+
 
 </body>
+
 </html>
