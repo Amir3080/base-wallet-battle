@@ -10,20 +10,15 @@ import {
 } from "https://esm.sh/viem@2/chains";
 
 
-// =====================================================
-// CONFIG
-// =====================================================
-
 const WORKER_URL =
   "https://wallet-battle-api.amirtrider1381.workers.dev";
 
 const CACHE_TIME =
   2 * 60 * 1000;
 
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 1000;
 
-// =====================================================
-// ELEMENTS
-// =====================================================
 
 const compareButton =
   document.getElementById("compareButton");
@@ -40,45 +35,43 @@ const shareButton =
 const copyLinkButton =
   document.getElementById("copyLinkButton");
 
+const downloadCardButton =
+  document.getElementById("downloadCardButton");
+
 const errorMessage =
   document.getElementById("errorMessage");
 
 const winnerBox =
   document.getElementById("winnerBox");
 
+const battleCardSection =
+  document.getElementById("battleCardSection");
 
-// =====================================================
-// BASE CLIENT
-// =====================================================
+const battleCanvas =
+  document.getElementById("battleCanvas");
+
 
 const baseClient =
   createPublicClient({
     chain: base,
-
     transport: http(
       "https://mainnet.base.org"
     )
   });
 
 
-// =====================================================
-// CACHE
-// =====================================================
-
 const walletCache =
   new Map();
 
 
-// =====================================================
-// HELPERS
-// =====================================================
+function sleep(ms) {
+  return new Promise(resolve =>
+    setTimeout(resolve, ms)
+  );
+}
+
 
 function shortenAddress(address) {
-
-  if (!address) {
-    return "--";
-  }
-
   return (
     address.slice(0, 6) +
     "..." +
@@ -88,23 +81,13 @@ function shortenAddress(address) {
 
 
 function showError(message) {
-
-  if (!errorMessage) {
-    return;
-  }
-
-  errorMessage.innerText =
+  errorMessage.textContent =
     message;
 }
 
 
 function clearError() {
-
-  if (!errorMessage) {
-    return;
-  }
-
-  errorMessage.innerText =
+  errorMessage.textContent =
     "";
 }
 
@@ -118,20 +101,16 @@ function formatETH(value) {
     return "0 ETH";
   }
 
-
   if (value < 0.0001) {
     return "<0.0001 ETH";
   }
 
-
   if (value < 1) {
-
     return (
       value.toFixed(4) +
       " ETH"
     );
   }
-
 
   return (
     value.toFixed(3) +
@@ -140,23 +119,16 @@ function formatETH(value) {
 }
 
 
-// =====================================================
-// ADDRESS VALIDATION
-// =====================================================
-
 function validateWallet(input) {
 
   const cleanInput =
     input.trim();
 
-
   if (!isAddress(cleanInput)) {
-
     throw new Error(
       "Invalid wallet address."
     );
   }
-
 
   return getAddress(
     cleanInput
@@ -164,10 +136,70 @@ function validateWallet(input) {
 }
 
 
-// =====================================================
-// TRANSACTION HISTORY
-// CLOUDFLARE -> BLOCKSCOUT
-// =====================================================
+async function fetchWithRetry(
+  url,
+  retries = MAX_RETRIES
+) {
+
+  let lastError;
+
+  for (
+    let attempt = 1;
+    attempt <= retries;
+    attempt++
+  ) {
+
+    try {
+
+      const response =
+        await fetch(url);
+
+      if (response.ok) {
+        return response;
+      }
+
+      let serverMessage =
+        `Server error: ${response.status}`;
+
+      try {
+
+        const data =
+          await response.json();
+
+        if (data.error) {
+          serverMessage =
+            data.error;
+        } else if (data.message) {
+          serverMessage =
+            data.message;
+        }
+
+      } catch {}
+
+      throw new Error(
+        serverMessage
+      );
+
+    } catch (error) {
+
+      lastError =
+        error;
+
+      if (attempt < retries) {
+
+        await sleep(
+          RETRY_DELAY * attempt
+        );
+      }
+    }
+  }
+
+  throw lastError ||
+    new Error(
+      "Request failed."
+    );
+}
+
 
 async function getTransactionHistory(
   address
@@ -177,65 +209,27 @@ async function getTransactionHistory(
     `${WORKER_URL}/history?address=` +
     encodeURIComponent(address);
 
-
   const response =
-    await fetch(url);
-
-
-  if (!response.ok) {
-
-    let message =
-      `Wallet API error: ${response.status}`;
-
-
-    try {
-
-      const errorData =
-        await response.json();
-
-
-      if (errorData.error) {
-
-        message =
-          errorData.error;
-      }
-
-    } catch {
-      // Ignore malformed error
-    }
-
-
-    throw new Error(
-      message
-    );
-  }
-
+    await fetchWithRetry(url);
 
   const data =
     await response.json();
 
-
   if (
-    Array.isArray(
-      data.result
-    )
+    Array.isArray(data.result)
   ) {
-
     return data.result;
   }
-
 
   const message =
     String(
       data.message || ""
     ).toLowerCase();
 
-
   const result =
     String(
       data.result || ""
     ).toLowerCase();
-
 
   if (
     data.status === "0" &&
@@ -243,22 +237,13 @@ async function getTransactionHistory(
       message.includes(
         "no transaction"
       ) ||
-
       result.includes(
         "no transaction"
       )
     )
   ) {
-
     return [];
   }
-
-
-  console.error(
-    "Worker response:",
-    data
-  );
-
 
   throw new Error(
     data.error ||
@@ -267,10 +252,6 @@ async function getTransactionHistory(
   );
 }
 
-
-// =====================================================
-// BALANCE
-// =====================================================
 
 async function getWalletBalance(
   address
@@ -283,38 +264,23 @@ async function getWalletBalance(
         address
       });
 
-
     return (
       Number(balanceWei) /
       1e18
     );
 
-
-  } catch (error) {
-
-    console.warn(
-      "Balance request failed:",
-      error
-    );
-
+  } catch {
 
     return 0;
   }
 }
 
 
-// =====================================================
-// WALLET AGE
-// =====================================================
-
 function calculateWalletAge(
   transactions
 ) {
 
-  if (
-    !transactions ||
-    transactions.length === 0
-  ) {
+  if (!transactions.length) {
 
     return {
       days: 0,
@@ -322,38 +288,24 @@ function calculateWalletAge(
     };
   }
 
-
-  let oldestTimestamp =
+  let oldest =
     Infinity;
 
+  transactions.forEach(tx => {
 
-  transactions.forEach(
-    tx => {
+    const timestamp =
+      Number(tx.timeStamp);
 
-      const timestamp =
-        Number(
-          tx.timeStamp
-        );
-
-
-      if (
-        timestamp > 0 &&
-        timestamp <
-          oldestTimestamp
-      ) {
-
-        oldestTimestamp =
-          timestamp;
-      }
+    if (
+      timestamp > 0 &&
+      timestamp < oldest
+    ) {
+      oldest =
+        timestamp;
     }
-  );
+  });
 
-
-  if (
-    !Number.isFinite(
-      oldestTimestamp
-    )
-  ) {
+  if (!Number.isFinite(oldest)) {
 
     return {
       days: 0,
@@ -361,61 +313,35 @@ function calculateWalletAge(
     };
   }
 
-
-  const firstDate =
-    new Date(
-      oldestTimestamp *
-      1000
-    );
-
-
-  const now =
-    new Date();
-
-
   const days =
     Math.max(
       0,
-
       Math.floor(
         (
-          now -
-          firstDate
+          Date.now() -
+          oldest * 1000
         ) /
-        (
-          1000 *
-          60 *
-          60 *
-          24
-        )
+        86400000
       )
     );
 
-
   let text;
-
 
   if (days >= 365) {
 
     text =
-      `${(days / 365)
-        .toFixed(1)} years`;
+      `${(days / 365).toFixed(1)} years`;
 
-  } else if (
-    days >= 30
-  ) {
+  } else if (days >= 30) {
 
     text =
-      `${Math.floor(
-        days / 30
-      )} months`;
+      `${Math.floor(days / 30)} months`;
 
   } else {
 
     text =
       `${days} days`;
   }
-
 
   return {
     days,
@@ -424,59 +350,35 @@ function calculateWalletAge(
 }
 
 
-// =====================================================
-// ACTIVE DAYS
-// =====================================================
-
 function calculateActiveDays(
   transactions
 ) {
 
-  const uniqueDays =
+  const days =
     new Set();
 
+  transactions.forEach(tx => {
 
-  transactions.forEach(
-    tx => {
+    const timestamp =
+      Number(tx.timeStamp);
 
-      const timestamp =
-        Number(
-          tx.timeStamp
-        );
-
-
-      if (!timestamp) {
-        return;
-      }
-
-
-      const date =
-        new Date(
-          timestamp *
-          1000
-        );
-
-
-      const day =
-        date
-          .toISOString()
-          .slice(0, 10);
-
-
-      uniqueDays.add(
-        day
-      );
+    if (!timestamp) {
+      return;
     }
-  );
 
+    const date =
+      new Date(
+        timestamp * 1000
+      )
+      .toISOString()
+      .slice(0, 10);
 
-  return uniqueDays.size;
+    days.add(date);
+  });
+
+  return days.size;
 }
 
-
-// =====================================================
-// ETH VOLUME
-// =====================================================
 
 function calculateVolume(
   transactions,
@@ -486,48 +388,37 @@ function calculateVolume(
   let totalWei =
     0n;
 
-
   const wallet =
-    walletAddress
-      .toLowerCase();
+    walletAddress.toLowerCase();
 
+  transactions.forEach(tx => {
 
-  transactions.forEach(
-    tx => {
+    const from =
+      String(
+        tx.from || ""
+      ).toLowerCase();
 
-      const from =
-        String(
-          tx.from || ""
-        ).toLowerCase();
+    const to =
+      String(
+        tx.to || ""
+      ).toLowerCase();
 
-
-      const to =
-        String(
-          tx.to || ""
-        ).toLowerCase();
-
-
-      if (
-        from !== wallet &&
-        to !== wallet
-      ) {
-        return;
-      }
-
-
-      try {
-
-        totalWei +=
-          BigInt(
-            tx.value || "0"
-          );
-
-      } catch {
-        // Ignore invalid value
-      }
+    if (
+      from !== wallet &&
+      to !== wallet
+    ) {
+      return;
     }
-  );
 
+    try {
+
+      totalWei +=
+        BigInt(
+          tx.value || "0"
+        );
+
+    } catch {}
+  });
 
   return (
     Number(totalWei) /
@@ -535,10 +426,6 @@ function calculateVolume(
   );
 }
 
-
-// =====================================================
-// GAS SPENT
-// =====================================================
 
 function calculateGasSpent(
   transactions,
@@ -548,56 +435,38 @@ function calculateGasSpent(
   let totalGasWei =
     0n;
 
-
   const wallet =
-    walletAddress
-      .toLowerCase();
+    walletAddress.toLowerCase();
 
+  transactions.forEach(tx => {
 
-  transactions.forEach(
-    tx => {
+    const from =
+      String(
+        tx.from || ""
+      ).toLowerCase();
 
-      const from =
-        String(
-          tx.from || ""
-        ).toLowerCase();
-
-
-      // Only sender pays gas
-      if (
-        from !== wallet
-      ) {
-        return;
-      }
-
-
-      try {
-
-        const gasUsed =
-          BigInt(
-            tx.gasUsed ||
-            "0"
-          );
-
-
-        const gasPrice =
-          BigInt(
-            tx.gasPrice ||
-            "0"
-          );
-
-
-        totalGasWei +=
-          gasUsed *
-          gasPrice;
-
-
-      } catch {
-        // Ignore malformed tx
-      }
+    if (from !== wallet) {
+      return;
     }
-  );
 
+    try {
+
+      const gasUsed =
+        BigInt(
+          tx.gasUsed || "0"
+        );
+
+      const gasPrice =
+        BigInt(
+          tx.gasPrice || "0"
+        );
+
+      totalGasWei +=
+        gasUsed *
+        gasPrice;
+
+    } catch {}
+  });
 
   return (
     Number(totalGasWei) /
@@ -606,76 +475,55 @@ function calculateGasSpent(
 }
 
 
-// =====================================================
-// SCORE BREAKDOWN
-// =====================================================
-
 function calculateScoreBreakdown(
   stats
 ) {
 
-  // AGE = 20
   const age =
     Math.min(
       20,
-
       (
         stats.age.days /
         1095
       ) * 20
     );
 
-
-  // TRANSACTIONS = 25
   const transactions =
     Math.min(
       25,
-
       (
         Math.log10(
-          stats.transactions +
-          1
+          stats.transactions + 1
         ) /
         4
       ) * 25
     );
 
-
-  // ACTIVE DAYS = 30
   const activeDays =
     Math.min(
       30,
-
       (
         Math.log10(
-          stats.activeDays +
-          1
+          stats.activeDays + 1
         ) /
         3
       ) * 30
     );
 
-
-  // VOLUME = 15
   const volume =
     Math.min(
       15,
-
       (
         Math.log10(
-          stats.volume +
-          1
+          stats.volume + 1
         ) /
         3
       ) * 15
     );
 
-
-  // GAS = 10
   const gas =
     Math.min(
       10,
-
       (
         Math.log10(
           stats.gasSpent *
@@ -686,14 +534,14 @@ function calculateScoreBreakdown(
       ) * 10
     );
 
-
   const total =
-    age +
-    transactions +
-    activeDays +
-    volume +
-    gas;
-
+    Math.round(
+      age +
+      transactions +
+      activeDays +
+      volume +
+      gas
+    );
 
   return {
 
@@ -719,25 +567,31 @@ function calculateScoreBreakdown(
     total:
       Math.max(
         0,
-
         Math.min(
           100,
-          Math.round(total)
+          total
         )
       )
   };
 }
 
 
-// =====================================================
-// WALLET PERSONALITY
-// =====================================================
-
 function getWalletPersonality(
   stats
 ) {
 
-  // Very active + old wallet
+  if (
+    stats.transactions === 0
+  ) {
+
+    return {
+      emoji: "💤",
+      title: "Dormant Wallet",
+      description:
+        "No visible transaction activity found on Base."
+    };
+  }
+
   if (
     stats.age.days >= 730 &&
     stats.activeDays >= 200
@@ -751,23 +605,18 @@ function getWalletPersonality(
     };
   }
 
-
-  // Huge transaction count
   if (
     stats.transactions >= 1000
   ) {
 
     return {
       emoji: "⚡",
-      title:
-        "Transaction Machine",
+      title: "Transaction Machine",
       description:
         "This wallet lives onchain and racks up transactions."
     };
   }
 
-
-  // Lots of gas
   if (
     stats.gasSpent >= 0.05
   ) {
@@ -780,111 +629,83 @@ function getWalletPersonality(
     };
   }
 
-
-  // Consistent activity
   if (
     stats.activeDays >= 100
   ) {
 
     return {
       emoji: "🔥",
-      title:
-        "Onchain Grinder",
+      title: "Onchain Grinder",
       description:
         "Consistent activity across many different days."
     };
   }
 
-
-  // High native ETH volume
   if (
     stats.volume >= 10
   ) {
 
     return {
       emoji: "🐋",
-      title:
-        "Volume Whale",
+      title: "Volume Whale",
       description:
         "This wallet has moved significant native ETH volume."
     };
   }
 
-
-  // New wallet
   if (
     stats.age.days <= 60
   ) {
 
     return {
       emoji: "🌱",
-      title:
-        "Fresh Wallet",
+      title: "Fresh Wallet",
       description:
         "A new wallet beginning its journey on Base."
     };
   }
 
-
-  // Low transaction count
   if (
     stats.transactions < 30
   ) {
 
     return {
       emoji: "🥷",
-      title:
-        "Silent Operator",
+      title: "Silent Operator",
       description:
         "A quiet wallet with a small onchain footprint."
     };
   }
 
-
-  // Default
   return {
     emoji: "🔵",
-    title:
-      "Base Explorer",
+    title: "Base Explorer",
     description:
       "An active wallet exploring the Base ecosystem."
   };
 }
 
 
-// =====================================================
-// GET ALL WALLET STATS
-// =====================================================
-
 async function getWalletStats(
   address
 ) {
 
-  const cacheKey =
+  const key =
     address.toLowerCase();
 
-
   const cached =
-    walletCache.get(
-      cacheKey
-    );
+    walletCache.get(key);
 
-
-  // Browser cache: 2 minutes
   if (
     cached &&
-    (
-      Date.now() -
-      cached.time
-    ) <
+    Date.now() -
+    cached.time <
     CACHE_TIME
   ) {
 
     return cached.data;
   }
 
-
-  // Both network requests run together
   const [
     history,
     balance
@@ -901,33 +722,6 @@ async function getWalletStats(
 
     ]);
 
-
-  const age =
-    calculateWalletAge(
-      history
-    );
-
-
-  const activeDays =
-    calculateActiveDays(
-      history
-    );
-
-
-  const volume =
-    calculateVolume(
-      history,
-      address
-    );
-
-
-  const gasSpent =
-    calculateGasSpent(
-      history,
-      address
-    );
-
-
   const stats = {
 
     address,
@@ -935,37 +729,46 @@ async function getWalletStats(
     transactions:
       history.length,
 
-    age,
+    age:
+      calculateWalletAge(
+        history
+      ),
 
-    activeDays,
+    activeDays:
+      calculateActiveDays(
+        history
+      ),
 
-    volume,
+    volume:
+      calculateVolume(
+        history,
+        address
+      ),
 
     balance,
 
-    gasSpent
+    gasSpent:
+      calculateGasSpent(
+        history,
+        address
+      )
   };
-
 
   stats.breakdown =
     calculateScoreBreakdown(
       stats
     );
 
-
   stats.onchainScore =
     stats.breakdown.total;
-
 
   stats.personality =
     getWalletPersonality(
       stats
     );
 
-
   walletCache.set(
-    cacheKey,
-
+    key,
     {
       time:
         Date.now(),
@@ -975,14 +778,9 @@ async function getWalletStats(
     }
   );
 
-
   return stats;
 }
 
-
-// =====================================================
-// COMPARE VALUES
-// =====================================================
 
 function compareValues(
   valueA,
@@ -993,171 +791,106 @@ function compareValues(
   formattedB
 ) {
 
-  elementA.innerText =
+  elementA.classList.remove(
+    "metric-winner"
+  );
+
+  elementB.classList.remove(
+    "metric-winner"
+  );
+
+  elementA.textContent =
     formattedA;
 
-
-  elementB.innerText =
+  elementB.textContent =
     formattedB;
-
 
   if (valueA > valueB) {
 
-    elementA.innerText =
+    elementA.textContent =
       "🏆 " +
       formattedA;
 
+    elementA.classList.add(
+      "metric-winner"
+    );
 
     return "A";
   }
 
-
   if (valueB > valueA) {
 
-    elementB.innerText =
+    elementB.textContent =
       "🏆 " +
       formattedB;
 
+    elementB.classList.add(
+      "metric-winner"
+    );
 
     return "B";
   }
 
-
   return "tie";
 }
 
-
-// =====================================================
-// DISPLAY PERSONALITY
-// =====================================================
 
 function displayPersonality(
   stats,
   side
 ) {
 
-  const emojiElement =
-    document.getElementById(
-      `personalityEmoji${side}`
-    );
+  document.getElementById(
+    `personalityEmoji${side}`
+  ).textContent =
+    stats.personality.emoji;
 
+  document.getElementById(
+    `personality${side}`
+  ).textContent =
+    stats.personality.title;
 
-  const titleElement =
-    document.getElementById(
-      `personality${side}`
-    );
-
-
-  const descElement =
-    document.getElementById(
-      `personalityDesc${side}`
-    );
-
-
-  if (emojiElement) {
-
-    emojiElement.innerText =
-      stats.personality.emoji;
-  }
-
-
-  if (titleElement) {
-
-    titleElement.innerText =
-      stats.personality.title;
-  }
-
-
-  if (descElement) {
-
-    descElement.innerText =
-      stats.personality.description;
-  }
+  document.getElementById(
+    `personalityDesc${side}`
+  ).textContent =
+    stats.personality.description;
 }
 
-
-// =====================================================
-// DISPLAY SCORE BREAKDOWN
-// =====================================================
 
 function displayScoreBreakdown(
   stats,
   side
 ) {
 
-  const breakdown =
+  const score =
     stats.breakdown;
 
+  document.getElementById(
+    `breakdownAge${side}`
+  ).textContent =
+    `+${score.age} / 20`;
 
-  const age =
-    document.getElementById(
-      `breakdownAge${side}`
-    );
+  document.getElementById(
+    `breakdownTx${side}`
+  ).textContent =
+    `+${score.transactions} / 25`;
 
+  document.getElementById(
+    `breakdownDays${side}`
+  ).textContent =
+    `+${score.activeDays} / 30`;
 
-  const tx =
-    document.getElementById(
-      `breakdownTx${side}`
-    );
+  document.getElementById(
+    `breakdownVolume${side}`
+  ).textContent =
+    `+${score.volume} / 15`;
 
-
-  const days =
-    document.getElementById(
-      `breakdownDays${side}`
-    );
-
-
-  const volume =
-    document.getElementById(
-      `breakdownVolume${side}`
-    );
-
-
-  const gas =
-    document.getElementById(
-      `breakdownGas${side}`
-    );
-
-
-  if (age) {
-
-    age.innerText =
-      `+${breakdown.age} / 20`;
-  }
-
-
-  if (tx) {
-
-    tx.innerText =
-      `+${breakdown.transactions} / 25`;
-  }
-
-
-  if (days) {
-
-    days.innerText =
-      `+${breakdown.activeDays} / 30`;
-  }
-
-
-  if (volume) {
-
-    volume.innerText =
-      `+${breakdown.volume} / 15`;
-  }
-
-
-  if (gas) {
-
-    gas.innerText =
-      `+${breakdown.gas} / 10`;
-  }
+  document.getElementById(
+    `breakdownGas${side}`
+  ).textContent =
+    `+${score.gas} / 10`;
 }
 
-
-// =====================================================
-// CREATE SHAREABLE URL
-// =====================================================
 
 function createBattleURL(
   walletA,
@@ -1169,36 +902,518 @@ function createBattleURL(
       window.location.href
     );
 
-
   url.searchParams.set(
     "a",
     walletA
   );
-
 
   url.searchParams.set(
     "b",
     walletB
   );
 
-
   return url.toString();
 }
 
 
-// =====================================================
-// COPY BATTLE LINK
-// =====================================================
+function updateBattleCard(
+  statsA,
+  statsB,
+  winnerText
+) {
+
+  battleCardSection.style.display =
+    "block";
+
+  document.getElementById(
+    "cardAddressA"
+  ).textContent =
+    shortenAddress(
+      statsA.address
+    );
+
+  document.getElementById(
+    "cardAddressB"
+  ).textContent =
+    shortenAddress(
+      statsB.address
+    );
+
+  document.getElementById(
+    "cardScoreA"
+  ).textContent =
+    statsA.onchainScore;
+
+  document.getElementById(
+    "cardScoreB"
+  ).textContent =
+    statsB.onchainScore;
+
+  document.getElementById(
+    "cardPersonalityA"
+  ).textContent =
+    `${statsA.personality.emoji} ${statsA.personality.title}`;
+
+  document.getElementById(
+    "cardPersonalityB"
+  ).textContent =
+    `${statsB.personality.emoji} ${statsB.personality.title}`;
+
+  document.getElementById(
+    "cardWinner"
+  ).textContent =
+    winnerText;
+}
+
+
+function roundedRect(
+  ctx,
+  x,
+  y,
+  width,
+  height,
+  radius,
+  fillStyle
+) {
+
+  ctx.fillStyle =
+    fillStyle;
+
+  ctx.beginPath();
+
+  ctx.roundRect(
+    x,
+    y,
+    width,
+    height,
+    radius
+  );
+
+  ctx.fill();
+}
+
+
+function drawBattleCard(
+  statsA,
+  statsB,
+  winnerText
+) {
+
+  const canvas =
+    battleCanvas;
+
+  const ctx =
+    canvas.getContext("2d");
+
+  ctx.clearRect(
+    0,
+    0,
+    canvas.width,
+    canvas.height
+  );
+
+
+  const bg =
+    ctx.createLinearGradient(
+      0,
+      0,
+      1200,
+      675
+    );
+
+  bg.addColorStop(
+    0,
+    "#06122f"
+  );
+
+  bg.addColorStop(
+    0.55,
+    "#0a2058"
+  );
+
+  bg.addColorStop(
+    1,
+    "#0052ff"
+  );
+
+  ctx.fillStyle =
+    bg;
+
+  ctx.fillRect(
+    0,
+    0,
+    1200,
+    675
+  );
+
+
+  const glow =
+    ctx.createRadialGradient(
+      130,
+      100,
+      10,
+      130,
+      100,
+      380
+    );
+
+  glow.addColorStop(
+    0,
+    "rgba(57,112,255,.9)"
+  );
+
+  glow.addColorStop(
+    1,
+    "rgba(57,112,255,0)"
+  );
+
+  ctx.fillStyle =
+    glow;
+
+  ctx.fillRect(
+    0,
+    0,
+    1200,
+    675
+  );
+
+
+  ctx.fillStyle =
+    "#0052ff";
+
+  ctx.beginPath();
+
+  ctx.arc(
+    70,
+    65,
+    28,
+    0,
+    Math.PI * 2
+  );
+
+  ctx.fill();
+
+
+  ctx.fillStyle =
+    "#ffffff";
+
+  ctx.fillRect(
+    51,
+    62,
+    38,
+    6
+  );
+
+
+  ctx.fillStyle =
+    "#ffffff";
+
+  ctx.font =
+    "900 28px Arial";
+
+  ctx.textAlign =
+    "left";
+
+  ctx.fillText(
+    "BASE WALLET BATTLE",
+    120,
+    72
+  );
+
+
+  ctx.fillStyle =
+    "#a9bce5";
+
+  ctx.font =
+    "600 16px Arial";
+
+  ctx.fillText(
+    "Which Base wallet wins?",
+    120,
+    103
+  );
+
+
+  roundedRect(
+    ctx,
+    70,
+    165,
+    430,
+    310,
+    28,
+    "rgba(255,255,255,.08)"
+  );
+
+  roundedRect(
+    ctx,
+    700,
+    165,
+    430,
+    310,
+    28,
+    "rgba(255,255,255,.08)"
+  );
+
+
+  ctx.textAlign =
+    "center";
+
+
+  ctx.fillStyle =
+    "#9eb4df";
+
+  ctx.font =
+    "800 15px Arial";
+
+  ctx.fillText(
+    "WALLET A",
+    285,
+    213
+  );
+
+
+  ctx.fillStyle =
+    "#ffffff";
+
+  ctx.font =
+    "800 26px Arial";
+
+  ctx.fillText(
+    shortenAddress(
+      statsA.address
+    ),
+    285,
+    258
+  );
+
+
+  ctx.fillStyle =
+    "#ffffff";
+
+  ctx.font =
+    "900 104px Arial";
+
+  ctx.fillText(
+    statsA.onchainScore,
+    285,
+    375
+  );
+
+
+  ctx.fillStyle =
+    "#9eb4df";
+
+  ctx.font =
+    "700 18px Arial";
+
+  ctx.fillText(
+    "/ 100",
+    285,
+    408
+  );
+
+
+  ctx.fillStyle =
+    "#c7d5f3";
+
+  ctx.font =
+    "800 22px Arial";
+
+  ctx.fillText(
+    statsA.personality.title,
+    285,
+    450
+  );
+
+
+  ctx.fillStyle =
+    "#9eb4df";
+
+  ctx.font =
+    "800 15px Arial";
+
+  ctx.fillText(
+    "WALLET B",
+    915,
+    213
+  );
+
+
+  ctx.fillStyle =
+    "#ffffff";
+
+  ctx.font =
+    "800 26px Arial";
+
+  ctx.fillText(
+    shortenAddress(
+      statsB.address
+    ),
+    915,
+    258
+  );
+
+
+  ctx.fillStyle =
+    "#ffffff";
+
+  ctx.font =
+    "900 104px Arial";
+
+  ctx.fillText(
+    statsB.onchainScore,
+    915,
+    375
+  );
+
+
+  ctx.fillStyle =
+    "#9eb4df";
+
+  ctx.font =
+    "700 18px Arial";
+
+  ctx.fillText(
+    "/ 100",
+    915,
+    408
+  );
+
+
+  ctx.fillStyle =
+    "#c7d5f3";
+
+  ctx.font =
+    "800 22px Arial";
+
+  ctx.fillText(
+    statsB.personality.title,
+    915,
+    450
+  );
+
+
+  ctx.fillStyle =
+    "#0052ff";
+
+  ctx.beginPath();
+
+  ctx.arc(
+    600,
+    320,
+    54,
+    0,
+    Math.PI * 2
+  );
+
+  ctx.fill();
+
+
+  ctx.fillStyle =
+    "#ffffff";
+
+  ctx.font =
+    "900 28px Arial";
+
+  ctx.fillText(
+    "VS",
+    600,
+    330
+  );
+
+
+  roundedRect(
+    ctx,
+    250,
+    515,
+    700,
+    72,
+    20,
+    "rgba(255,255,255,.10)"
+  );
+
+
+  ctx.fillStyle =
+    "#ffffff";
+
+  ctx.font =
+    "900 28px Arial";
+
+  ctx.fillText(
+    winnerText,
+    600,
+    560
+  );
+
+
+  ctx.fillStyle =
+    "#a7b8dc";
+
+  ctx.font =
+    "600 16px Arial";
+
+
+  ctx.textAlign =
+    "left";
+
+  ctx.fillText(
+    "Built on Base",
+    70,
+    635
+  );
+
+
+  ctx.textAlign =
+    "right";
+
+  ctx.fillText(
+    "@amirshonnm",
+    1130,
+    635
+  );
+}
+
+
+function prepareBattleCardDownload(
+  statsA,
+  statsB,
+  winnerText
+) {
+
+  downloadCardButton.style.display =
+    "block";
+
+  downloadCardButton.onclick =
+    function () {
+
+      drawBattleCard(
+        statsA,
+        statsB,
+        winnerText
+      );
+
+      const link =
+        document.createElement(
+          "a"
+        );
+
+      link.download =
+        "base-wallet-battle.png";
+
+      link.href =
+        battleCanvas.toDataURL(
+          "image/png"
+        );
+
+      link.click();
+    };
+}
+
 
 function prepareCopyLink(
   statsA,
   statsB
 ) {
-
-  if (!copyLinkButton) {
-    return;
-  }
-
 
   const battleURL =
     createBattleURL(
@@ -1206,18 +1421,14 @@ function prepareCopyLink(
       statsB.address
     );
 
-
-  // Update current URL
   window.history.replaceState(
     {},
     "",
     battleURL
   );
 
-
   copyLinkButton.style.display =
     "block";
-
 
   copyLinkButton.onclick =
     async function () {
@@ -1230,21 +1441,18 @@ function prepareCopyLink(
             battleURL
           );
 
-
-        copyLinkButton.innerText =
+        copyLinkButton.textContent =
           "✓ Link Copied";
-
 
         setTimeout(
           () => {
 
-            copyLinkButton.innerText =
+            copyLinkButton.textContent =
               "🔗 Copy Battle Link";
 
           },
           1800
         );
-
 
       } catch {
 
@@ -1257,39 +1465,17 @@ function prepareCopyLink(
 }
 
 
-// =====================================================
-// SHARE ON X
-// =====================================================
-
 function prepareShare(
   statsA,
   statsB,
   winnerText
 ) {
 
-  if (!shareButton) {
-    return;
-  }
-
-
   shareButton.style.display =
     "block";
 
-
   shareButton.onclick =
     function () {
-
-      const walletA =
-        shortenAddress(
-          statsA.address
-        );
-
-
-      const walletB =
-        shortenAddress(
-          statsB.address
-        );
-
 
       const battleURL =
         createBattleURL(
@@ -1297,16 +1483,17 @@ function prepareShare(
           statsB.address
         );
 
-
       const text =
 `⚔️ Base Wallet Battle
 
-${walletA}: ${statsA.onchainScore}/100
+${shortenAddress(statsA.address)}
+Score: ${statsA.onchainScore}/100
 ${statsA.personality.emoji} ${statsA.personality.title}
 
 VS
 
-${walletB}: ${statsB.onchainScore}/100
+${shortenAddress(statsB.address)}
+Score: ${statsB.onchainScore}/100
 ${statsB.personality.emoji} ${statsB.personality.title}
 
 ${winnerText}
@@ -1316,16 +1503,14 @@ ${battleURL}
 
 Built by @amirshonnm`;
 
-
-      const shareUrl =
+      const shareURL =
         "https://x.com/intent/post?text=" +
         encodeURIComponent(
           text
         );
 
-
       window.open(
-        shareUrl,
+        shareURL,
         "_blank",
         "noopener,noreferrer"
       );
@@ -1333,175 +1518,91 @@ Built by @amirshonnm`;
 }
 
 
-// =====================================================
-// RESET
-// =====================================================
-
 function resetResults() {
 
-  const statIds = [
+  document
+    .querySelectorAll(
+      ".stat-value"
+    )
+    .forEach(element => {
 
-    "walletAgeA",
-    "walletAgeB",
+      element.textContent =
+        "--";
 
-    "transactionsA",
-    "transactionsB",
-
-    "activeDaysA",
-    "activeDaysB",
-
-    "volumeA",
-    "volumeB",
-
-    "balanceA",
-    "balanceB",
-
-    "gasSpentA",
-    "gasSpentB",
-
-    "onchainScoreA",
-    "onchainScoreB"
-  ];
+      element.classList.remove(
+        "metric-winner"
+      );
+    });
 
 
-  statIds.forEach(
-    id => {
-
-      const element =
-        document.getElementById(
-          id
-        );
-
-
-      if (element) {
-
-        element.innerText =
-          "--";
-      }
-    }
-  );
-
-
-  // Personality reset
   [
     "A",
     "B"
-  ].forEach(
-    side => {
+  ].forEach(side => {
 
-      const emoji =
-        document.getElementById(
-          `personalityEmoji${side}`
-        );
+    document.getElementById(
+      `personalityEmoji${side}`
+    ).textContent =
+      "🧬";
 
+    document.getElementById(
+      `personality${side}`
+    ).textContent =
+      "--";
 
-      const title =
-        document.getElementById(
-          `personality${side}`
-        );
-
-
-      const description =
-        document.getElementById(
-          `personalityDesc${side}`
-        );
+    document.getElementById(
+      `personalityDesc${side}`
+    ).textContent =
+      "Analyze wallet to discover its personality.";
+  });
 
 
-      if (emoji) {
-        emoji.innerText =
-          "🧬";
-      }
+  [
+    "Age",
+    "Tx",
+    "Days",
+    "Volume",
+    "Gas"
+  ].forEach(type => {
+
+    [
+      "A",
+      "B"
+    ].forEach(side => {
+
+      document.getElementById(
+        `breakdown${type}${side}`
+      ).textContent =
+        "--";
+    });
+  });
 
 
-      if (title) {
-        title.innerText =
-          "--";
-      }
+  winnerBox.innerHTML =
+    `
+      <div class="winner-title">
+        Winner will appear here
+      </div>
+
+      <div class="winner-subtitle">
+        Compare two wallets to start the battle.
+      </div>
+    `;
 
 
-      if (description) {
+  battleCardSection.style.display =
+    "none";
 
-        description.innerText =
-          "Analyze wallet to discover its personality.";
-      }
-    }
-  );
+  shareButton.style.display =
+    "none";
 
+  copyLinkButton.style.display =
+    "none";
 
-  // Breakdown reset
-  const breakdownIds = [
-
-    "breakdownAgeA",
-    "breakdownAgeB",
-
-    "breakdownTxA",
-    "breakdownTxB",
-
-    "breakdownDaysA",
-    "breakdownDaysB",
-
-    "breakdownVolumeA",
-    "breakdownVolumeB",
-
-    "breakdownGasA",
-    "breakdownGasB"
-  ];
-
-
-  breakdownIds.forEach(
-    id => {
-
-      const element =
-        document.getElementById(
-          id
-        );
-
-
-      if (element) {
-
-        element.innerText =
-          "--";
-      }
-    }
-  );
-
-
-  if (winnerBox) {
-
-    winnerBox.innerHTML =
-      `
-        <div class="winner-title">
-          Winner will appear here
-        </div>
-
-        <div class="winner-subtitle">
-          Compare two wallets to start the battle.
-        </div>
-      `;
-  }
-
-
-  if (shareButton) {
-
-    shareButton.style.display =
-      "none";
-  }
-
-
-  if (copyLinkButton) {
-
-    copyLinkButton.style.display =
-      "none";
-
-    copyLinkButton.innerText =
-      "🔗 Copy Battle Link";
-  }
+  downloadCardButton.style.display =
+    "none";
 }
 
-
-// =====================================================
-// COMPARE
-// =====================================================
 
 compareButton.addEventListener(
   "click",
@@ -1512,42 +1613,6 @@ compareButton.addEventListener(
     resetResults();
 
 
-    const inputA =
-      walletAInput.value.trim();
-
-
-    const inputB =
-      walletBInput.value.trim();
-
-
-    // -------------------------
-    // EMPTY INPUTS
-    // -------------------------
-
-    if (!inputA) {
-
-      showError(
-        "Enter Wallet A address."
-      );
-
-      return;
-    }
-
-
-    if (!inputB) {
-
-      showError(
-        "Enter Wallet B address."
-      );
-
-      return;
-    }
-
-
-    // -------------------------
-    // VALIDATE
-    // -------------------------
-
     let walletA;
     let walletB;
 
@@ -1556,7 +1621,7 @@ compareButton.addEventListener(
 
       walletA =
         validateWallet(
-          inputA
+          walletAInput.value
         );
 
     } catch {
@@ -1573,7 +1638,7 @@ compareButton.addEventListener(
 
       walletB =
         validateWallet(
-          inputB
+          walletBInput.value
         );
 
     } catch {
@@ -1586,21 +1651,15 @@ compareButton.addEventListener(
     }
 
 
-    // -------------------------
-    // LOADING
-    // -------------------------
-
-    compareButton.innerText =
-      "⚡ Analyzing Base...";
-
-
     compareButton.disabled =
       true;
+
+    compareButton.textContent =
+      "⚡ Analyzing Base...";
 
 
     try {
 
-      // BOTH wallets at same time
       const [
         statsA,
         statsB
@@ -1618,351 +1677,160 @@ compareButton.addEventListener(
         ]);
 
 
-      // -------------------------
-      // PERSONALITIES
-      // -------------------------
-
       displayPersonality(
         statsA,
         "A"
       );
-
 
       displayPersonality(
         statsB,
         "B"
       );
 
-
-      // -------------------------
-      // SCORE BREAKDOWN
-      // -------------------------
-
       displayScoreBreakdown(
         statsA,
         "A"
       );
-
 
       displayScoreBreakdown(
         statsB,
         "B"
       );
 
-
-      // -------------------------
-      // ELEMENTS
-      // -------------------------
-
-      const ageA =
-        document.getElementById(
-          "walletAgeA"
-        );
-
-
-      const ageB =
-        document.getElementById(
-          "walletAgeB"
-        );
-
-
-      const txA =
-        document.getElementById(
-          "transactionsA"
-        );
-
-
-      const txB =
-        document.getElementById(
-          "transactionsB"
-        );
-
-
-      const activeA =
-        document.getElementById(
-          "activeDaysA"
-        );
-
-
-      const activeB =
-        document.getElementById(
-          "activeDaysB"
-        );
-
-
-      const volumeA =
-        document.getElementById(
-          "volumeA"
-        );
-
-
-      const volumeB =
-        document.getElementById(
-          "volumeB"
-        );
-
-
-      const balanceA =
-        document.getElementById(
-          "balanceA"
-        );
-
-
-      const balanceB =
-        document.getElementById(
-          "balanceB"
-        );
-
-
-      const gasA =
-        document.getElementById(
-          "gasSpentA"
-        );
-
-
-      const gasB =
-        document.getElementById(
-          "gasSpentB"
-        );
-
-
-      const scoreA =
-        document.getElementById(
-          "onchainScoreA"
-        );
-
-
-      const scoreB =
-        document.getElementById(
-          "onchainScoreB"
-        );
-
-
-      // -------------------------
-      // BATTLE SCORE
-      // -------------------------
 
       let battleScoreA =
         0;
-
 
       let battleScoreB =
         0;
 
 
-      // AGE
-      const ageWinner =
-        compareValues(
-
-          statsA.age.days,
-          statsB.age.days,
-
-          ageA,
-          ageB,
-
-          statsA.age.text,
-          statsB.age.text
-        );
-
-
-      if (
-        ageWinner === "A"
+      function battleMetric(
+        valueA,
+        valueB,
+        idA,
+        idB,
+        formattedA,
+        formattedB
       ) {
-        battleScoreA++;
+
+        const winner =
+          compareValues(
+            valueA,
+            valueB,
+            document.getElementById(
+              idA
+            ),
+            document.getElementById(
+              idB
+            ),
+            formattedA,
+            formattedB
+          );
+
+        if (winner === "A") {
+          battleScoreA++;
+        }
+
+        if (winner === "B") {
+          battleScoreB++;
+        }
       }
 
 
-      if (
-        ageWinner === "B"
-      ) {
-        battleScoreB++;
-      }
+      battleMetric(
+        statsA.age.days,
+        statsB.age.days,
+        "walletAgeA",
+        "walletAgeB",
+        statsA.age.text,
+        statsB.age.text
+      );
 
 
-      // TRANSACTIONS
-      const txWinner =
-        compareValues(
-
-          statsA.transactions,
-          statsB.transactions,
-
-          txA,
-          txB,
-
-          statsA.transactions
-            .toLocaleString(),
-
-          statsB.transactions
-            .toLocaleString()
-        );
+      battleMetric(
+        statsA.transactions,
+        statsB.transactions,
+        "transactionsA",
+        "transactionsB",
+        statsA.transactions
+          .toLocaleString(),
+        statsB.transactions
+          .toLocaleString()
+      );
 
 
-      if (
-        txWinner === "A"
-      ) {
-        battleScoreA++;
-      }
+      battleMetric(
+        statsA.activeDays,
+        statsB.activeDays,
+        "activeDaysA",
+        "activeDaysB",
+        statsA.activeDays
+          .toLocaleString(),
+        statsB.activeDays
+          .toLocaleString()
+      );
 
 
-      if (
-        txWinner === "B"
-      ) {
-        battleScoreB++;
-      }
+      battleMetric(
+        statsA.volume,
+        statsB.volume,
+        "volumeA",
+        "volumeB",
+        formatETH(
+          statsA.volume
+        ),
+        formatETH(
+          statsB.volume
+        )
+      );
 
 
-      // ACTIVE DAYS
-      const activeWinner =
-        compareValues(
-
-          statsA.activeDays,
-          statsB.activeDays,
-
-          activeA,
-          activeB,
-
-          statsA.activeDays
-            .toLocaleString(),
-
-          statsB.activeDays
-            .toLocaleString()
-        );
+      battleMetric(
+        statsA.balance,
+        statsB.balance,
+        "balanceA",
+        "balanceB",
+        formatETH(
+          statsA.balance
+        ),
+        formatETH(
+          statsB.balance
+        )
+      );
 
 
-      if (
-        activeWinner === "A"
-      ) {
-        battleScoreA++;
-      }
+      battleMetric(
+        statsA.gasSpent,
+        statsB.gasSpent,
+        "gasSpentA",
+        "gasSpentB",
+        formatETH(
+          statsA.gasSpent
+        ),
+        formatETH(
+          statsB.gasSpent
+        )
+      );
 
 
-      if (
-        activeWinner === "B"
-      ) {
-        battleScoreB++;
-      }
-
-
-      // VOLUME
-      const volumeWinner =
-        compareValues(
-
-          statsA.volume,
-          statsB.volume,
-
-          volumeA,
-          volumeB,
-
-          formatETH(
-            statsA.volume
-          ),
-
-          formatETH(
-            statsB.volume
-          )
-        );
-
-
-      if (
-        volumeWinner === "A"
-      ) {
-        battleScoreA++;
-      }
-
-
-      if (
-        volumeWinner === "B"
-      ) {
-        battleScoreB++;
-      }
-
-
-      // BALANCE
-      const balanceWinner =
-        compareValues(
-
-          statsA.balance,
-          statsB.balance,
-
-          balanceA,
-          balanceB,
-
-          formatETH(
-            statsA.balance
-          ),
-
-          formatETH(
-            statsB.balance
-          )
-        );
-
-
-      if (
-        balanceWinner === "A"
-      ) {
-        battleScoreA++;
-      }
-
-
-      if (
-        balanceWinner === "B"
-      ) {
-        battleScoreB++;
-      }
-
-
-      // GAS
-      const gasWinner =
-        compareValues(
-
-          statsA.gasSpent,
-          statsB.gasSpent,
-
-          gasA,
-          gasB,
-
-          formatETH(
-            statsA.gasSpent
-          ),
-
-          formatETH(
-            statsB.gasSpent
-          )
-        );
-
-
-      if (
-        gasWinner === "A"
-      ) {
-        battleScoreA++;
-      }
-
-
-      if (
-        gasWinner === "B"
-      ) {
-        battleScoreB++;
-      }
-
-
-      // ONCHAIN SCORE
       compareValues(
-
         statsA.onchainScore,
         statsB.onchainScore,
 
-        scoreA,
-        scoreB,
+        document.getElementById(
+          "onchainScoreA"
+        ),
+
+        document.getElementById(
+          "onchainScoreB"
+        ),
 
         `${statsA.onchainScore} / 100`,
 
         `${statsB.onchainScore} / 100`
       );
 
-
-      // -------------------------
-      // WINNER
-      // -------------------------
 
       let winnerText;
 
@@ -1972,65 +1840,70 @@ compareButton.addEventListener(
         battleScoreB
       ) {
 
+        winnerText =
+          `🏆 Wallet A Wins ${battleScoreA}:${battleScoreB}`;
+
         winnerBox.innerHTML =
           `
             <div class="winner-title">
-              🏆 Wallet A Wins — ${battleScoreA} : ${battleScoreB}
+              ${winnerText}
             </div>
 
             <div class="winner-subtitle">
-              Stronger onchain activity on Base 🎉
+              Stronger onchain activity on Base.
             </div>
           `;
-
-
-        winnerText =
-          `🏆 Wallet A wins ${battleScoreA}:${battleScoreB}!`;
-
 
       } else if (
         battleScoreB >
         battleScoreA
       ) {
 
+        winnerText =
+          `🏆 Wallet B Wins ${battleScoreB}:${battleScoreA}`;
+
         winnerBox.innerHTML =
           `
             <div class="winner-title">
-              🏆 Wallet B Wins — ${battleScoreB} : ${battleScoreA}
+              ${winnerText}
             </div>
 
             <div class="winner-subtitle">
-              Stronger onchain activity on Base 🎉
+              Stronger onchain activity on Base.
             </div>
           `;
 
+      } else {
 
         winnerText =
-          `🏆 Wallet B wins ${battleScoreB}:${battleScoreA}!`;
-
-
-      } else {
+          `🤝 Draw ${battleScoreA}:${battleScoreB}`;
 
         winnerBox.innerHTML =
           `
             <div class="winner-title">
-              🤝 Draw — ${battleScoreA} : ${battleScoreB}
+              ${winnerText}
             </div>
 
             <div class="winner-subtitle">
               These wallets are evenly matched.
             </div>
           `;
-
-
-        winnerText =
-          `🤝 Draw ${battleScoreA}:${battleScoreB}!`;
       }
 
 
-      // -------------------------
-      // SHARE
-      // -------------------------
+      updateBattleCard(
+        statsA,
+        statsB,
+        winnerText
+      );
+
+
+      prepareBattleCardDownload(
+        statsA,
+        statsB,
+        winnerText
+      );
+
 
       prepareShare(
         statsA,
@@ -2039,85 +1912,50 @@ compareButton.addEventListener(
       );
 
 
-      // -------------------------
-      // COPY LINK
-      // -------------------------
-
       prepareCopyLink(
         statsA,
         statsB
       );
 
 
-      console.log(
-        "Wallet A:",
-        statsA
-      );
-
-
-      console.log(
-        "Wallet B:",
-        statsB
-      );
-
-
     } catch (error) {
 
-      console.error(
-        "Wallet Battle Error:",
-        error
-      );
-
+      console.error(error);
 
       showError(
-        error.message ||
-        "Could not analyze wallets. Please try again."
+        "Could not load wallet data. Please try again."
       );
-
 
     } finally {
 
-      compareButton.innerText =
-        "⚔ Compare Wallets";
-
-
       compareButton.disabled =
         false;
+
+      compareButton.textContent =
+        "⚔ Compare Wallets";
     }
   }
 );
 
 
-// =====================================================
-// PRESS ENTER
-// =====================================================
-
 [
   walletAInput,
   walletBInput
-].forEach(
-  input => {
+].forEach(input => {
 
-    input.addEventListener(
-      "keydown",
-      event => {
+  input.addEventListener(
+    "keydown",
+    event => {
 
-        if (
-          event.key ===
-          "Enter"
-        ) {
-
-          compareButton.click();
-        }
+      if (
+        event.key === "Enter"
+      ) {
+        compareButton.click();
       }
-    );
-  }
-);
+    }
+  );
+});
 
-
-// =====================================================
-// LOAD WALLETS FROM SHARED URL
-// =====================================================
 
 function loadBattleFromURL() {
 
@@ -2126,14 +1964,11 @@ function loadBattleFromURL() {
       window.location.search
     );
 
-
   const walletA =
     params.get("a");
 
-
   const walletB =
     params.get("b");
-
 
   if (
     walletA &&
@@ -2145,9 +1980,15 @@ function loadBattleFromURL() {
     walletAInput.value =
       walletA;
 
-
     walletBInput.value =
       walletB;
+
+    setTimeout(
+      () => {
+        compareButton.click();
+      },
+      350
+    );
   }
 }
 
