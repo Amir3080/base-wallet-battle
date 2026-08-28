@@ -201,9 +201,7 @@ async function fetchWithRetry(
 }
 
 
-async function getTransactionHistory(
-  address
-) {
+async function getTransactionHistory(address) {
 
   const url =
     `${WORKER_URL}/history?address=` +
@@ -215,9 +213,8 @@ async function getTransactionHistory(
   const data =
     await response.json();
 
-  if (
-    Array.isArray(data.result)
-  ) {
+  // Normal transaction result
+  if (Array.isArray(data.result)) {
     return data.result;
   }
 
@@ -231,19 +228,34 @@ async function getTransactionHistory(
       data.result || ""
     ).toLowerCase();
 
+
+  // Valid wallet but no Base transactions
   if (
     data.status === "0" &&
     (
-      message.includes(
-        "no transaction"
-      ) ||
-      result.includes(
-        "no transaction"
-      )
+      message.includes("no transaction") ||
+      message.includes("no transactions") ||
+      message.includes("no records") ||
+      message.includes("not found") ||
+      result.includes("no transaction") ||
+      result.includes("no transactions") ||
+      result.includes("no records") ||
+      result.includes("not found")
     )
   ) {
     return [];
   }
+
+
+  // Some APIs return null/empty result for unused wallets
+  if (
+    data.result === null ||
+    data.result === "" ||
+    typeof data.result === "undefined"
+  ) {
+    return [];
+  }
+
 
   throw new Error(
     data.error ||
@@ -251,7 +263,6 @@ async function getTransactionHistory(
     "Could not load wallet history."
   );
 }
-
 
 async function getWalletBalance(
   address
@@ -1920,12 +1931,12 @@ compareButton.addEventListener(
 
     } catch (error) {
 
-      console.error(error);
+  console.error("Wallet Battle Error:", error);
 
-      showError(
-        "Could not load wallet data. Please try again."
-      );
-
+  showError(
+    error?.message ||
+    "Could not load wallet data. Please try again."
+  );
     } finally {
 
       compareButton.disabled =
